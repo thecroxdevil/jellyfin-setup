@@ -26,11 +26,31 @@ jobs:
 
     - name: Run tests
       run: |
-        python -m pytest tests/ -v || echo "No tests found, continuing..."
+        if [ -d "tests" ] && [ -n "$(find tests -name '*.py' 2>/dev/null)" ]; then
+          python -m pytest tests/ -v
+        else
+          echo "⚠️ No tests directory found or no Python test files, skipping tests..."
+        fi
 
     - name: Lint Python code
       run: |
-        python -m flake8 --max-line-length=100 --ignore=E501,W503 *.py || echo "Linting completed with warnings"
+        if command -v flake8 >/dev/null 2>&1; then
+          python -m flake8 --max-line-length=100 --ignore=E501,W503 *.py || echo "⚠️ Linting completed with warnings"
+        else
+          echo "⚠️ flake8 not available, skipping linting..."
+        fi
+
+    - name: Validate Docker Compose
+      run: |
+        if [ -f "docker-compose.yml" ]; then
+          if command -v docker-compose >/dev/null 2>&1; then
+            docker-compose config -q && echo "✅ Docker Compose syntax is valid"
+          else
+            echo "⚠️ docker-compose not available, skipping validation..."
+          fi
+        else
+          echo "⚠️ No docker-compose.yml found"
+        fi
 
     - name: Deploy to server
       if: github.ref == 'refs/heads/main'
@@ -39,35 +59,63 @@ jobs:
         host: ${{ secrets.SERVER_HOST }}
         username: ${{ secrets.SERVER_USER }}
         key: ${{ secrets.SERVER_SSH_KEY }}
-        port: ${{ secrets.SERVER_PORT }}
+        port: ${{ secrets.SERVER_PORT || '22' }}
         script: |
           set -e
           echo "🚀 Starting deployment..."
           
           # Navigate to deployment directory
-          cd ${{ secrets.DEPLOY_PATH || '/home/thecroxdevil/jellyfin-setup' }}
+          cd ${{ secrets.DEPLOY_PATH || '/opt/jellyfin-setup' }}
           
           # Backup current configuration
           echo "📦 Creating backup..."
-          sudo cp docker-compose.yml docker-compose.yml.backup.$(date +%Y%m%d_%H%M%S) || true
+          if [ -f "docker-compose.yml" ]; then
+            cp docker-compose.yml "docker-compose.yml.backup.$(date +%Y%m%d_%H%M%S)" || echo "⚠️ Failed to create backup, continuing..."
+          fi
           
           # Pull latest changes
           echo "📥 Pulling latest changes..."
-          git fetch origin
-          git reset --hard origin/main
+          if [ -d ".git" ]; then
+            git fetch origin || { echo "❌ Failed to fetch from GitHub"; exit 1; }
+            git reset --hard origin/main || { echo "❌ Failed to reset to latest changes"; exit 1; }
+          else
+            echo "❌ Not a git repository! Please ensure this is deployed from a git clone."
+            exit 1
+          fi
           
           # Install/update Python dependencies
           echo "🐍 Installing Python dependencies..."
-          python3 -m pip install --user -r requirements.txt || echo "Failed to install some dependencies, continuing..."
+          if [ -f "requirements.txt" ]; then
+            python3 -m pip install --user -r requirements.txt || echo "⚠️ Failed to install some dependencies, continuing..."
+            # Update PATH to include user-installed packages
+            export PATH="$HOME/.local/bin:$PATH"
+          else
+            echo "⚠️ No requirements.txt found, skipping Python dependencies..."
+          fi
           
           # Create required directories
           echo "📁 Creating required directories..."
           mkdir -p media/{movies,tv,music,photos} jellyfin_config xteve_config npm_data letsencrypt
           
+          # Check environment configuration
+          echo "🔧 Checking environment configuration..."
+          if [ ! -f ".env" ] && [ -f ".env.example" ]; then
+            echo "⚠️ No .env file found. Please copy .env.example to .env and configure it."
+            echo "ℹ️ For now, continuing with default values..."
+          elif [ ! -f ".env" ] && [ ! -f ".env.example" ]; then
+            echo "⚠️ No environment configuration files found. Services may not work correctly."
+          else
+            echo "✅ Environment configuration found"
+          fi
+          
           # Set permissions
           echo "🔐 Setting permissions..."
-          sudo chown -R $USER:$USER . || true
-          chmod +x scripts/*.sh || true
+          if [ -w . ]; then
+            chown -R $USER:$USER . 2>/dev/null || echo "⚠️ Failed to change ownership, continuing..."
+            chmod +x scripts/*.sh 2>/dev/null || echo "⚠️ Failed to make scripts executable, continuing..."
+          else
+            echo "⚠️ No write permissions in current directory"
+          fi
           
           # Run any pre-deployment scripts
           echo "🔧 Running pre-deployment tasks..."
@@ -77,15 +125,26 @@ jobs:
           
           # Stop existing containers
           echo "⏹️ Stopping existing containers..."
-          docker-compose down || echo "No containers to stop"
+          if [ -f "docker-compose.yml" ]; then
+            docker-compose down || echo "⚠️ No containers to stop or failed to stop some containers"
+          else
+            echo "⚠️ No docker-compose.yml found, skipping container stop"
+          fi
           
           # Pull latest images
           echo "📦 Pulling latest Docker images..."
-          docker-compose pull
+          if [ -f "docker-compose.yml" ]; then
+            docker-compose pull || echo "⚠️ Failed to pull some images, continuing..."
+          fi
           
           # Start services
           echo "▶️ Starting services..."
-          docker-compose up -d
+          if [ -f "docker-compose.yml" ]; then
+            docker-compose up -d || { echo "❌ Failed to start containers"; exit 1; }
+          else
+            echo "❌ No docker-compose.yml found, cannot start services"
+            exit 1
+          fi
           
           # Wait for services to be ready
           echo "⏳ Waiting for services to be ready..."
@@ -93,7 +152,11 @@ jobs:
           
           # Health check
           echo "🏥 Running health checks..."
-          bash scripts/health-check.sh || echo "Health check failed, but continuing..."
+          if [ -f "scripts/health-check.sh" ]; then
+            bash scripts/health-check.sh || echo "⚠️ Health check failed, but continuing..."
+          else
+            echo "⚠️ No health check script found, skipping..."
+          fi
           
           # Run post-deployment scripts
           echo "✅ Running post-deployment tasks..."
@@ -108,10 +171,38 @@ jobs:
           docker-compose ps
 
     - name: Notify deployment status
-      if: always()
-      uses: 8398a7/action-slack@v3
-      with:
-        status: ${{ job.status }}
-        webhook_url: ${{ secrets.DISCORD_WEBHOOK_URL }}
-      env:
-        SLACK_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+      if: always() && secrets.DISCORD_WEBHOOK_URL
+      run: |
+        if [ "${{ job.status }}" = "success" ]; then
+          MESSAGE="✅ Deployment to server completed successfully!"
+          COLOR="3066993"
+        else
+          MESSAGE="❌ Deployment to server failed!"
+          COLOR="15158332"
+        fi
+        
+        curl -H "Content-Type: application/json" -X POST -d "{
+          \"embeds\": [{
+            \"title\": \"Jellyfin Setup Deployment\",
+            \"description\": \"$MESSAGE\",
+            \"color\": $COLOR,
+            \"fields\": [
+              {
+                \"name\": \"Repository\",
+                \"value\": \"${{ github.repository }}\",
+                \"inline\": true
+              },
+              {
+                \"name\": \"Branch\",
+                \"value\": \"${{ github.ref_name }}\",
+                \"inline\": true
+              },
+              {
+                \"name\": \"Commit\",
+                \"value\": \"[\`${{ github.sha }}\`](${{ github.event.head_commit.url }})\",
+                \"inline\": true
+              }
+            ],
+            \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"
+          }]
+        }" "${{ secrets.DISCORD_WEBHOOK_URL }}" || echo "Failed to send Discord notification"
