@@ -18,9 +18,9 @@ echo "Sync script: $SYNC_SCRIPT"
 chmod +x "$SCRIPT_DIR"/*.sh
 
 # Setup log file
-sudo mkdir -p /var/log
-sudo touch /var/log/jellyfin-sync.log
-sudo chown $USER:$USER /var/log/jellyfin-sync.log
+LOG_DIR="$HOME/.local/log"
+mkdir -p "$LOG_DIR"
+touch "$LOG_DIR/jellyfin-sync.log"
 
 # Create cron job
 echo "Setting up cron job to run every 15 minutes..."
@@ -29,17 +29,17 @@ echo "Setting up cron job to run every 15 minutes..."
 (crontab -l 2>/dev/null | grep -v "sync-from-github.sh" | crontab -) || true
 
 # Add new cron job
-(crontab -l 2>/dev/null; echo "$CRON_SCHEDULE cd $PROJECT_DIR && $SYNC_SCRIPT >> /var/log/jellyfin-sync.log 2>&1") | crontab -
+(crontab -l 2>/dev/null; echo "$CRON_SCHEDULE cd $PROJECT_DIR && $SYNC_SCRIPT >> $LOG_DIR/jellyfin-sync.log 2>&1") | crontab -
 
 echo "✅ Automation setup complete!"
 echo
 echo "The system will now:"
 echo "  - Check for GitHub updates every 15 minutes"
 echo "  - Automatically pull changes and restart containers if needed"
-echo "  - Log all activities to /var/log/jellyfin-sync.log"
+echo "  - Log all activities to $LOG_DIR/jellyfin-sync.log"
 echo
 echo "To monitor the sync log:"
-echo "  tail -f /var/log/jellyfin-sync.log"
+echo "  tail -f $LOG_DIR/jellyfin-sync.log"
 echo
 echo "To manually trigger a sync:"
 echo "  $SYNC_SCRIPT"

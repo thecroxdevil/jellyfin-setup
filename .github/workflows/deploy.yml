@@ -126,7 +126,12 @@ jobs:
           # Stop existing containers
           echo "⏹️ Stopping existing containers..."
           if [ -f "docker-compose.yml" ]; then
-            docker-compose down || echo "⚠️ No containers to stop or failed to stop some containers"
+            if command -v docker-compose >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+              docker-compose down || echo "⚠️ No containers to stop or failed to stop some containers"
+            else
+              echo "⚠️ Docker not available or not running, skipping container operations"
+              exit 1
+            fi
           else
             echo "⚠️ No docker-compose.yml found, skipping container stop"
           fi
@@ -168,7 +173,11 @@ jobs:
           
           # Show container status
           echo "📊 Container status:"
-          docker-compose ps
+          if command -v docker-compose >/dev/null 2>&1; then
+            docker-compose ps || echo "⚠️ Failed to get container status"
+          else
+            echo "⚠️ docker-compose not available"
+          fi
 
     - name: Notify deployment status
       if: always() && secrets.DISCORD_WEBHOOK_URL

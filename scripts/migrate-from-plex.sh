@@ -6,9 +6,9 @@
 set -e
 
 # Configuration
-PLEX_CONFIG_DIR="${1:-/home/thecroxdevil/plex-setup/config}"
+PLEX_CONFIG_DIR="${1:-$HOME/plex-setup/config}"
 JELLYFIN_CONFIG_DIR="${2:-./jellyfin_config}"
-PLEX_MEDIA_DIR="${3:-/home/thecroxdevil/plex-setup/media}"
+PLEX_MEDIA_DIR="${3:-$HOME/plex-setup/media}"
 JELLYFIN_MEDIA_DIR="${4:-./media}"
 
 # Colors for output
