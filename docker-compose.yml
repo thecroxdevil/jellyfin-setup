@@ -1,0 +1,112 @@
+version: '3.8'
+
+services:
+  nginx-proxy-manager:
+    image: 'jc21/nginx-proxy-manager:latest'
+    container_name: nginx-proxy-manager
+    restart: unless-stopped
+    ports:
+      - '80:80'      # Public HTTP Port
+      - '443:443'    # Public HTTPS Port
+      - '81:81'      # Admin UI
+    volumes:
+      - ./npm_data:/data
+      - ./letsencrypt:/etc/letsencrypt
+    networks:
+      - jellyfin-net
+    environment:
+      - DISABLE_IPV6=true
+
+  jellyfin:
+    image: lscr.io/linuxserver/jellyfin:latest
+    container_name: jellyfin
+    restart: unless-stopped
+    ports:
+      - "8096:8096"     # HTTP Web UI
+      - "8920:8920"     # HTTPS Web UI (optional)
+      - "7359:7359/udp" # Auto-discovery
+      - "1900:1900/udp" # DLNA discovery
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-America/Vancouver}
+      - JELLYFIN_PublishedServerUrl=${JELLYFIN_PUBLISHED_SERVER_URL:-http://localhost:8096}
+    volumes:
+      - ./jellyfin_config:/config
+      - ./media/tv:/data/tvshows
+      - ./media/movies:/data/movies
+      - ./media/music:/data/music
+      - ./media/photos:/data/photos
+      - /opt/vc/lib:/opt/vc/lib  # Hardware acceleration (Raspberry Pi)
+    devices:
+      - /dev/dri:/dev/dri        # Hardware acceleration (Intel/AMD)
+    networks:
+      - jellyfin-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8096/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  xteve:
+    image: dnsforge/xteve:latest
+    container_name: xteve
+    restart: unless-stopped
+    ports:
+      - "34400:34400"
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-America/Vancouver}
+    volumes:
+      - ./xteve_config:/xteve/config
+      - ./xteve_config:/config  # Alternative config path
+      - /tmp/xteve:/tmp/xteve
+    networks:
+      - jellyfin-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:34400"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Optional: Watchtower for automatic updates
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: watchtower
+    restart: unless-stopped
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_SCHEDULE=0 0 4 * * *  # Daily at 4 AM
+      - WATCHTOWER_INCLUDE_RESTARTING=true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - jellyfin-net
+
+  # Optional: Portainer for Docker management
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: unless-stopped
+    ports:
+      - "9443:9443"
+    volumes:
+      - portainer_data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - jellyfin-net
+    command: --sslcert /data/portainer.crt --sslkey /data/portainer.key --host unix:///var/run/docker.sock
+
+networks:
+  jellyfin-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  portainer_data:
+    driver: local
