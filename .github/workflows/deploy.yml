@@ -32,14 +32,64 @@ jobs:
       run: |
         python -m flake8 --max-line-length=100 --ignore=E501,W503 *.py || echo "Linting completed with warnings"
 
+    - name: Check deployment secrets
+      if: github.ref == 'refs/heads/main'
+      run: |
+        echo "🔍 Checking deployment configuration..."
+        
+        MISSING_SECRETS=false
+        
+        if [ -z "${{ secrets.SERVER_HOST }}" ]; then
+          echo "❌ SERVER_HOST secret is not configured"
+          MISSING_SECRETS=true
+        else
+          echo "✅ SERVER_HOST is configured"
+        fi
+        
+        if [ -z "${{ secrets.SERVER_USER }}" ]; then
+          echo "❌ SERVER_USER secret is not configured"
+          MISSING_SECRETS=true
+        else
+          echo "✅ SERVER_USER is configured"
+        fi
+        
+        if [ -z "${{ secrets.SERVER_SSH_KEY }}" ]; then
+          echo "❌ SERVER_SSH_KEY secret is not configured"
+          MISSING_SECRETS=true
+        else
+          echo "✅ SERVER_SSH_KEY is configured"
+        fi
+        
+        if [ "$MISSING_SECRETS" = "true" ]; then
+          echo ""
+          echo "🚨 Deployment cannot proceed due to missing secrets!"
+          echo "Please configure the following secrets in your GitHub repository:"
+          echo "Settings → Secrets and variables → Actions → New repository secret"
+          echo ""
+          echo "Required secrets:"
+          echo "- SERVER_HOST: The IP address or hostname of your deployment server"
+          echo "- SERVER_USER: SSH username for the deployment server (e.g., ubuntu, root, or your username)"
+          echo "- SERVER_SSH_KEY: Private SSH key for authentication (contents of ~/.ssh/id_rsa or similar)"
+          echo ""
+          echo "Optional secrets:"
+          echo "- SERVER_PORT: SSH port (defaults to 22 if not specified)"
+          echo "- DEPLOY_PATH: Deployment directory path (defaults to /home/thecroxdevil/jellyfin-setup)"
+          echo "- SLACK_WEBHOOK_URL: Webhook URL for deployment notifications"
+          echo ""
+          echo "For more information, see the deployment documentation in the repository."
+          exit 1
+        fi
+        
+        echo "✅ All required deployment secrets are configured"
+
     - name: Deploy to server
       if: github.ref == 'refs/heads/main'
-      uses: appleboy/ssh-action@v1.0.0
+      uses: appleboy/ssh-action@v1.0.3
       with:
         host: ${{ secrets.SERVER_HOST }}
         username: ${{ secrets.SERVER_USER }}
         key: ${{ secrets.SERVER_SSH_KEY }}
-        port: ${{ secrets.SERVER_PORT }}
+        port: ${{ secrets.SERVER_PORT || '22' }}
         script: |
           set -e
           echo "🚀 Starting deployment..."
@@ -113,4 +163,4 @@ jobs:
       with:
         status: ${{ job.status }}
       env:
-        SLACK_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
