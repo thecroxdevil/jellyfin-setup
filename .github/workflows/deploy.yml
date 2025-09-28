@@ -74,7 +74,6 @@ jobs:
           echo "Optional secrets:"
           echo "- SERVER_PORT: SSH port (defaults to 22 if not specified)"
           echo "- DEPLOY_PATH: Deployment directory path (defaults to /home/thecroxdevil/jellyfin-setup)"
-          echo "- SLACK_WEBHOOK_URL: Webhook URL for deployment notifications"
           echo ""
           echo "For more information, see the deployment documentation in the repository."
           exit 1
@@ -127,15 +126,15 @@ jobs:
           
           # Stop existing containers
           echo "⏹️ Stopping existing containers..."
-          docker-compose down || echo "No containers to stop"
+          docker compose down || echo "No containers to stop"
           
           # Pull latest images
           echo "📦 Pulling latest Docker images..."
-          docker-compose pull
+          docker compose pull
           
           # Start services
           echo "▶️ Starting services..."
-          docker-compose up -d
+          docker compose up -d
           
           # Wait for services to be ready
           echo "⏳ Waiting for services to be ready..."
@@ -155,12 +154,4 @@ jobs:
           
           # Show container status
           echo "📊 Container status:"
-          docker-compose ps
-
-    - name: Notify deployment status
-      if: always()
-      uses: 8398a7/action-slack@v3
-      with:
-        status: ${{ job.status }}
-      env:
-        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          docker compose ps
