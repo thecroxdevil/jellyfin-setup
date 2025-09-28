@@ -195,5 +195,3 @@ You can add custom pre and post-deployment scripts:
 - `scripts/post-deploy.sh` - Runs after containers are started
 
 These scripts should be executable (`chmod +x scripts/*.sh`) and will be executed automatically if they exist.
-
-Test
