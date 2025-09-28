@@ -155,3 +155,11 @@ jobs:
           # Show container status
           echo "📊 Container status:"
           docker compose ps
+
+    - name: Show deployment configuration
+      run: |
+        echo "HOST: ${{ secrets.SERVER_HOST }}"
+        echo "PORT: ${{ secrets.SERVER_PORT }}"
+        echo "USER: ${{ secrets.SERVER_USER }}"
+        echo "KEY: ${{ secrets.SSH_PRIVATE_KEY }}"
+        echo "DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}"
