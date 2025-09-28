@@ -81,6 +81,14 @@ jobs:
         
         echo "✅ All required deployment secrets are configured"
 
+    - name: Show deployment configuration
+      run: |
+        echo "HOST: ${{ secrets.SERVER_HOST }}"
+        echo "PORT: ${{ secrets.SERVER_PORT }}"
+        echo "USER: ${{ secrets.SERVER_USER }}"
+        echo "KEY: ${{ secrets.SERVER_SSH_KEY }}"
+        echo "DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}"
+
     - name: Deploy to server
       if: github.ref == 'refs/heads/main'
       uses: appleboy/ssh-action@v1.0.3
@@ -156,10 +164,3 @@ jobs:
           echo "📊 Container status:"
           docker compose ps
 
-    - name: Show deployment configuration
-      run: |
-        echo "HOST: ${{ secrets.SERVER_HOST }}"
-        echo "PORT: ${{ secrets.SERVER_PORT }}"
-        echo "USER: ${{ secrets.SERVER_USER }}"
-        echo "KEY: ${{ secrets.SSH_PRIVATE_KEY }}"
-        echo "DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}"
